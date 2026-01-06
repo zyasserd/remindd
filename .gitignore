@@ -1,4 +1,4 @@
-remindd
+/remindd
 *.test
 *.out
 .direnv

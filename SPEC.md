@@ -39,7 +39,9 @@ reminders:
   <name>:
     type: interval | condition
     label: string
-
+    action: # optional
+      label: string         # optional; if omitted, use "Run"
+      command: string
     snooze:
       default: <duration>  # optional; default="1d"
 
@@ -55,10 +57,6 @@ reminders:
     trigger:
       consecutive: integer  # >= 1
 
-    # optional action for any reminder type
-    action:
-      label: string         # optional; if omitted, use "Run"
-      command: string
 ```
 
 ### 3.3 Field constraints and parsing

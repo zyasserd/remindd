@@ -1,0 +1,18 @@
+# Interval reminder where lastDone is tracked purely via remindd state.
+# - When you run `remindd run <name>`, remindd writes state.lastDone.
+# - If lastDone.command is omitted, `remindd check` uses state.lastDone (missing/null => 0).
+
+notificationWindow:
+  start: "00:00"
+  end: "00:00"  # start==end => allow all day
+
+reminders:
+  stateBackedInterval:
+    type: interval
+    label: "State-backed interval reminder"
+    interval: 1d
+    action:
+      label: "Mark done"
+      command: "echo stateBackedInterval done"
+    snooze:
+      default: 2h
