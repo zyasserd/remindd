@@ -16,7 +16,7 @@ let
   # Returns integer seconds or null if invalid.
   parseDurationSeconds = s:
     let
-      s' = lib.strings.trim (toString s);
+      s' = if s == null then "" else lib.strings.trim (toString s);
       step = rest:
         let
           m = builtins.match "^([0-9]+)([smhdw])(.*)$" rest;
@@ -52,8 +52,9 @@ let
     let
       reminders = cfg.settings.reminders;
       candidates = lib.flatten (lib.mapAttrsToList (_: r:
-        if r.type == "condition" then [ r.check.interval ]
-        else [ r.interval ]
+        if r.type == "condition" && r.check != null then [ r.check.interval ]
+        else if r.type == "interval" && r.interval != null then [ r.interval ]
+        else [ ]
       ) reminders);
       secs = lib.filter (x: x != null) (map parseDurationSeconds candidates);
       minSecs = if secs == [ ] then null else lib.lists.foldl' builtins.min (builtins.head secs) (builtins.tail secs);
@@ -100,7 +101,7 @@ let
     options.consecutive = lib.mkOption { type = lib.types.ints.positive; description = "Number of consecutive trues required."; };
   });
 
-  reminderType = lib.types.submodule ({ config, ... }: {
+  reminderType = lib.types.submodule ({ ... }: {
     options = {
       type = lib.mkOption {
         type = lib.types.enum [ "interval" "condition" ];
@@ -136,17 +137,6 @@ let
       snooze = lib.mkOption { type = lib.types.nullOr snoozeType; default = null; };
       action = lib.mkOption { type = lib.types.nullOr actionType; default = null; };
     };
-
-    assertions = [
-      {
-        assertion = (config.type == "interval") -> (config.interval != null);
-        message = "remindd reminder: interval is required when type=interval";
-      }
-      {
-        assertion = (config.type == "condition") -> (config.check != null && config.trigger != null);
-        message = "remindd reminder: check and trigger are required when type=condition";
-      }
-    ];
   });
 
   settingsType = lib.types.submodule ({ ... }: {
@@ -194,9 +184,19 @@ in
         assertion = cfg.settings.reminders != { };
         message = "programs.remindd.settings.reminders must not be empty";
       }
+    ]
+    ++ (lib.mapAttrsToList (name: r: {
+      assertion = (r.type == "interval") -> (r.interval != null);
+      message = "programs.remindd.settings.reminders.${name}: interval is required when type=interval";
+    }) cfg.settings.reminders)
+    ++ (lib.mapAttrsToList (name: r: {
+      assertion = (r.type == "condition") -> (r.check != null && r.trigger != null);
+      message = "programs.remindd.settings.reminders.${name}: check and trigger are required when type=condition";
+    }) cfg.settings.reminders)
+    ++ [
       {
         assertion = derivedCheckInterval != null;
-        message = "could not derive timer interval from settings (use simple durations like 30s/5m/1h/2d/1w or combinations like 1h30m)";
+        message = "could not derive timer interval from settings (use durations like 30s/5m/1h/2d/1w or combinations like 1h30m)";
       }
     ];
 
