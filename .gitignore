@@ -1,0 +1,4 @@
+remindd
+*.test
+*.out
+.direnv
