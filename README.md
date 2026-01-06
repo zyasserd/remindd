@@ -2,7 +2,7 @@
 
 Desktop reminders (no daemon) driven by a YAML config.
 
-`remindd` is a stateless CLI: you run `remindd check` from a cron/systemd timer, and it stores per-reminder state in `$XDG_STATE_HOME`.
+`remindd` is a CLI you run periodically (cron/systemd timer). It stores per-reminder state in `$XDG_STATE_HOME`.
 
 ## Requirements
 
@@ -30,18 +30,18 @@ Create `~/.config/remindd/config.yaml` (or set `REMINDD_CONFIG`):
 
 ```yaml
 notificationWindow:
-	start: "18:00"
-	end: "22:00"
+  start: "18:00"
+  end: "22:00"
 
 reminders:
-	demoInterval:
-		type: interval
-		label: "Stretch"
-		interval: 2h
-		# lastDone.command is optional; if omitted, remindd uses per-reminder state.lastDone.
-		action:
-			label: "Done"
-			command: "echo stretched"
+  demoInterval:
+    type: interval
+    label: "Stretch"
+    interval: 2h
+    # lastDone.command is optional; if omitted, remindd uses per-reminder state.lastDone.
+    action:
+      label: "Done"
+      command: "echo stretched"
 ```
 
 Run:
@@ -94,21 +94,20 @@ Example `home.nix`:
 ```nix
 { inputs, ... }:
 {
+
 	imports = [ inputs.remindd.homeManagerModules.remindd ];
 
 	programs.remindd = {
 		enable = true;
 
-		# Optional: write config to $XDG_CONFIG_HOME/remindd/config.yaml
-		configText = ''
-			notificationWindow:
-				start: "18:00"
-				end: "22:00"
-			reminders: {}
-		'';
-
-		# Optional: run `remindd check` periodically via a user systemd timer
-		checkInterval = "15m";
+		# Required: config as a typed Nix attrset (written to $XDG_CONFIG_HOME/remindd/config.yaml)
+		settings = {
+			notificationWindow = {
+				start = "18:00";
+				end = "22:00";
+			};
+			reminders = { };
+		};
 	};
 }
 ```
