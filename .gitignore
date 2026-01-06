@@ -2,3 +2,4 @@ remindd
 *.test
 *.out
 .direnv
+result
