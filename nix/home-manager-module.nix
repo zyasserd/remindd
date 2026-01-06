@@ -137,7 +137,7 @@ let
       action = lib.mkOption { type = lib.types.nullOr actionType; default = null; };
     };
 
-    config.assertions = [
+    assertions = [
       {
         assertion = (config.type == "interval") -> (config.interval != null);
         message = "remindd reminder: interval is required when type=interval";
