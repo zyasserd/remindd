@@ -1,4 +1,4 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, remindd, ... }:
 
 let
   cfg = config.programs.remindd;
@@ -127,12 +127,6 @@ in
   options.programs.remindd = {
     enable = lib.mkEnableOption "remindd";
 
-    package = lib.mkOption {
-      type = lib.types.package;
-      default = pkgs.remindd;
-      description = "The remindd package to install.";
-    };
-
     # Configuration for remindd, expressed as Nix.
     # This module writes it to $XDG_CONFIG_HOME/${configFilePath}.
     settings = lib.mkOption {
@@ -144,7 +138,7 @@ in
 
   config = lib.mkIf cfg.enable {
     home.packages = [
-      cfg.package
+      remindd
       pkgs.libnotify
     ];
 
@@ -185,7 +179,7 @@ in
       };
       Service = {
         Type = "oneshot";
-        ExecStart = "${cfg.package}/bin/remindd check";
+        ExecStart = "${remindd}/bin/remindd check";
       };
     };
 

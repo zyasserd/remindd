@@ -8,21 +8,32 @@
 
   outputs = { self, nixpkgs, utils }:
     let
-      overlay = import ./nix/overlay.nix;
       hmModule = import ./nix/home-manager-module.nix;
     in
     {
-      overlays.default = overlay;
-      homeManagerModules.default = hmModule;
-      homeManagerModules.remindd = hmModule;
+      homeManagerModules.remindd = { pkgs, ... }:
+        {
+          imports = [ hmModule ];
+          _module.args.remindd = self.packages.${pkgs.system}.remindd;
+        };
+      homeManagerModules.default = self.homeManagerModules.remindd;
     }
     // utils.lib.eachDefaultSystem (system:
       let
-        pkgs = import nixpkgs {
-          inherit system;
-          overlays = [ overlay ];
+        pkgs = import nixpkgs { inherit system; };
+        remindd = pkgs.buildGoModule {
+          pname = "remindd";
+          version = "0.1.0";
+
+          src = ../.;
+
+          vendorHash = "sha256-g+yaVIx4jxpAQ/+WrGKxhVeliYx7nLQe/zsGpxV4Fn4=";
+
+          subPackages = [ "cmd/remindd" ];
+          ldflags = [ "-s" "-w" ];
+
+          doCheck = true;
         };
-        remindd = pkgs.remindd;
       in {
         devShells.default = pkgs.mkShell {
           packages = with pkgs; [
