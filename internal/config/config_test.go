@@ -8,8 +8,8 @@ func TestValidateIntervalWithoutLastDoneCommand(t *testing.T) {
 			"a": {
 				Type:     "interval",
 				Label:    "A",
-				Interval: "1d",
-				// LastDone omitted => OK
+				Interval: &Interval{Duration: 86400},
+				// interval.lastDoneCommand omitted => OK
 			},
 		},
 	}

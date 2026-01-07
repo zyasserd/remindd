@@ -10,7 +10,7 @@ import (
 
 func TestResolveLastDoneUnixFallsBackToState(t *testing.T) {
 	eng := NewEngine(&config.Config{Reminders: map[string]config.Reminder{}})
-	rc := config.Reminder{Type: "interval", Interval: "1d", LastDone: nil}
+	rc := config.Reminder{Type: "interval", Interval: &config.Interval{Duration: 86400}}
 	st := &state.State{}
 
 	v, err := eng.resolveLastDoneUnix(rc, st)

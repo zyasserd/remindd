@@ -37,8 +37,10 @@ reminders:
   demoInterval:
     type: interval
     label: "Stretch"
-    interval: 2h
-    # lastDone.command is optional; if omitted, remindd uses per-reminder state.lastDone.
+		snooze: 3600
+		interval:
+			duration: 7200
+			# interval.lastDoneCommand is optional; if omitted, remindd uses per-reminder state.lastDone.
     action:
       label: "Done"
       command: "echo stretched"
@@ -56,7 +58,7 @@ Run:
 - `remindd check`: evaluate reminders and notify if due
 - `remindd list`: print reminder status
 - `remindd run <name>`: run the reminder action and update state
-- `remindd snooze <name> <duration>`: snooze a reminder (e.g. `10m`, `2h`, `3d`, `1w`)
+- `remindd snooze <name> <seconds>`: snooze a reminder (e.g. `600`, `3600`)
 
 ## Config
 
@@ -72,11 +74,13 @@ See `SPEC.md` for the full schema.
 
 ### Reminder types
 
-- **interval**: due when `now > lastDone + interval`
+
+- **interval**: due when `now > lastDone + interval.duration`
 	- last done source:
-		- `lastDone.command` stdout (unix seconds), if configured
+		- `interval.lastDoneCommand` stdout (unix seconds), if configured
 		- otherwise `state.lastDone` (missing/null => `0`)
-- **condition**: runs `check.command` every `check.interval`; due after `trigger.consecutive` successes
+
+- **condition**: runs `condition.command` every `condition.interval`; due after `condition.trigger` successes
 
 Commands are executed via `/bin/sh -c`. If you need bash features, wrap with `bash -lc '...'`.
 

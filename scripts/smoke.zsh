@@ -19,8 +19,8 @@ mkdir -p "$XDG_CONFIG_HOME" "$XDG_STATE_HOME"
 echo "[smoke] list"
 ./remindd list
 
-echo "[smoke] snooze demoInterval 10m"
-./remindd snooze demoInterval 10m
+echo "[smoke] snooze demoInterval 600"
+./remindd snooze demoInterval 600
 ./remindd list
 
 echo "[smoke] run demoInterval"

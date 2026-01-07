@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"remindd/internal/config"
-	"remindd/internal/duration"
 	"remindd/internal/exitcode"
 	"remindd/internal/notify"
 	"remindd/internal/shell"
@@ -107,10 +106,10 @@ func (e *Engine) CheckAll(now time.Time) error {
 func (e *Engine) evalOne(now time.Time, name string, rc config.Reminder, st *state.State) (due bool, body string, changed bool, err error) {
 	switch rc.Type {
 	case "interval":
-		interval, err := duration.Parse(rc.Interval)
-		if err != nil {
-			return false, "", false, &ExitError{Code: exitcode.ConfigError, Message: fmt.Sprintf("%s: invalid interval: %v", name, err)}
-		}
+			if rc.Interval == nil || rc.Interval.Duration <= 0 {
+				return false, "", false, &ExitError{Code: exitcode.ConfigError, Message: fmt.Sprintf("%s: interval.duration must be > 0", name)}
+			}
+			interval := time.Duration(rc.Interval.Duration) * time.Second
 		lastDoneUnix, err := e.resolveLastDoneUnix(rc, st)
 		if err != nil {
 			return false, "", false, &ExitError{Code: exitcode.ConfigError, Message: fmt.Sprintf("%s: %v", name, err)}
@@ -124,10 +123,13 @@ func (e *Engine) evalOne(now time.Time, name string, rc config.Reminder, st *sta
 		return false, "", false, nil
 
 	case "condition":
-		checkInterval, err := duration.Parse(rc.Check.Interval)
-		if err != nil {
-			return false, "", false, &ExitError{Code: exitcode.ConfigError, Message: fmt.Sprintf("%s: invalid check.interval: %v", name, err)}
-		}
+			if rc.Condition == nil {
+				return false, "", false, &ExitError{Code: exitcode.ConfigError, Message: fmt.Sprintf("%s: condition is required", name)}
+			}
+			if rc.Condition.Interval <= 0 {
+				return false, "", false, &ExitError{Code: exitcode.ConfigError, Message: fmt.Sprintf("%s: condition.interval must be > 0", name)}
+			}
+			checkInterval := time.Duration(rc.Condition.Interval) * time.Second
 		if st.LastCheckAt != nil {
 			last := time.Unix(*st.LastCheckAt, 0)
 			if now.Sub(last) < checkInterval {
@@ -135,9 +137,9 @@ func (e *Engine) evalOne(now time.Time, name string, rc config.Reminder, st *sta
 			}
 		}
 
-		res, err := shell.Run(rc.Check.Command)
+			res, err := shell.Run(rc.Condition.Command)
 		if err != nil {
-			return false, "", false, &ExitError{Code: exitcode.ConfigError, Message: fmt.Sprintf("%s: check.command failed: %v", name, err)}
+				return false, "", false, &ExitError{Code: exitcode.ConfigError, Message: fmt.Sprintf("%s: condition.command failed: %v", name, err)}
 		}
 
 		nowUnix := now.Unix()
@@ -154,7 +156,7 @@ func (e *Engine) evalOne(now time.Time, name string, rc config.Reminder, st *sta
 			st.FirstTrueAt = nil
 		}
 
-		if st.TrueStreak >= rc.Trigger.Consecutive {
+			if st.TrueStreak >= rc.Condition.Trigger {
 			return true, fmt.Sprintf("Condition true for %d consecutive checks", st.TrueStreak), true, nil
 		}
 		return false, "", true, nil
@@ -241,11 +243,14 @@ func (e *Engine) snoozeWithState(now time.Time, name string, rc config.Reminder,
 }
 
 func (e *Engine) defaultSnooze(rc config.Reminder) (time.Duration, error) {
-	def := "1d"
-	if rc.Snooze != nil && strings.TrimSpace(rc.Snooze.Default) != "" {
-		def = rc.Snooze.Default
+	secs := int64(86400)
+	if rc.Snooze != nil {
+		secs = *rc.Snooze
 	}
-	return duration.Parse(def)
+	if secs <= 0 {
+		return 0, fmt.Errorf("snooze must be > 0")
+	}
+	return time.Duration(secs) * time.Second, nil
 }
 
 func parseUnixSeconds(s string) (int64, error) {
@@ -279,20 +284,20 @@ func formatIntervalBody(overdue time.Duration) string {
 }
 
 func (e *Engine) resolveLastDoneUnix(rc config.Reminder, st *state.State) (int64, error) {
-	if rc.LastDone == nil || strings.TrimSpace(rc.LastDone.Command) == "" {
+	if rc.Interval == nil || strings.TrimSpace(rc.Interval.LastDoneCommand) == "" {
 		if st == nil || st.LastDone == nil {
 			return 0, nil
 		}
 		return *st.LastDone, nil
 	}
 
-	res, err := shell.Run(rc.LastDone.Command)
+	res, err := shell.Run(rc.Interval.LastDoneCommand)
 	if err != nil {
-		return 0, fmt.Errorf("lastDone.command failed: %v", err)
+		return 0, fmt.Errorf("interval.lastDoneCommand failed: %v", err)
 	}
 	lastDoneUnix, err := parseUnixSeconds(res.Stdout)
 	if err != nil {
-		return 0, fmt.Errorf("lastDone.command stdout invalid unix timestamp: %v", err)
+		return 0, fmt.Errorf("interval.lastDoneCommand stdout invalid unix timestamp: %v", err)
 	}
 	return lastDoneUnix, nil
 }

@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"remindd/internal/config"
-	"remindd/internal/duration"
 	"remindd/internal/state"
 )
 
@@ -26,7 +25,10 @@ func (e *Engine) FormatListLine(now time.Time, name string, rc config.Reminder, 
 	} else {
 		switch rc.Type {
 		case "interval":
-			interval, _ := duration.Parse(rc.Interval)
+			if rc.Interval == nil || rc.Interval.Duration <= 0 {
+				return "", fmt.Errorf("%s: interval.duration must be > 0", name)
+			}
+			interval := time.Duration(rc.Interval.Duration) * time.Second
 			last, err := e.resolveLastDoneUnix(rc, st)
 			if err != nil {
 				return "", err
@@ -39,10 +41,13 @@ func (e *Engine) FormatListLine(now time.Time, name string, rc config.Reminder, 
 				detail = fmt.Sprintf("due at %s", dueAt.Format(time.RFC3339))
 			}
 		case "condition":
-			if st.TrueStreak >= rc.Trigger.Consecutive {
+			if rc.Condition == nil {
+				return "", fmt.Errorf("%s: condition is required", name)
+			}
+			if st.TrueStreak >= rc.Condition.Trigger {
 				dueStr = "YES"
 			}
-			detail = fmt.Sprintf("streak=%d/%d", st.TrueStreak, rc.Trigger.Consecutive)
+			detail = fmt.Sprintf("streak=%d/%d", st.TrueStreak, rc.Condition.Trigger)
 		}
 	}
 

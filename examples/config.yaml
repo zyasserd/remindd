@@ -6,26 +6,23 @@ reminders:
   demoInterval:
     type: interval
     label: "Demo interval reminder"
-    interval: 1d
-    # lastDone.command is optional; if omitted, remindd uses state.lastDone (missing/null => 0).
-    lastDone:
-      command: "echo 0"
+    snooze: 7200
+    interval:
+      duration: 86400
+      # interval.lastDoneCommand is optional; if omitted, remindd uses state.lastDone (missing/null => 0).
+      lastDoneCommand: "echo 0"
     action:
       label: "Mark done"
       command: "echo demoInterval done"
-    snooze:
-      default: 2h
 
   demoCondition:
     type: condition
     label: "Demo condition reminder"
-    check:
-      interval: 1m
+    snooze: 1800
+    condition:
+      interval: 60
       command: "true"   # exit 0 => true
-    trigger:
-      consecutive: 1
+      trigger: 1
     action:
       label: "Reset"
       command: "echo demoCondition reset"
-    snooze:
-      default: 30m

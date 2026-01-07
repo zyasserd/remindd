@@ -12,52 +12,19 @@ let
 
   checkServiceName = "remindd-check";
 
-  # Parse durations like: 30s, 5m, 1h, 2d, 1w, 1h30m.
-  # Returns integer seconds or null if invalid.
-  parseDurationSeconds = s:
-    let
-      s' = if s == null then "" else lib.strings.trim (toString s);
-      step = rest:
-        let
-          m = builtins.match "^([0-9]+)([smhdw])(.*)$" rest;
-        in
-        if m == null then null else {
-          n = lib.toInt (builtins.elemAt m 0);
-          unit = builtins.elemAt m 1;
-          tail = builtins.elemAt m 2;
-        };
-      mult = unit:
-        if unit == "s" then 1
-        else if unit == "m" then 60
-        else if unit == "h" then 60 * 60
-        else if unit == "d" then 24 * 60 * 60
-        else if unit == "w" then 7 * 24 * 60 * 60
-        else null;
-      go = rest: acc:
-        if rest == "" then acc
-        else
-          let
-            p = step rest;
-            mlt = if p == null then null else mult p.unit;
-          in
-          if p == null || mlt == null then null else go p.tail (acc + (p.n * mlt));
-    in
-    if s' == "" then null else go s' 0;
-
   # Derive the check interval from settings:
-  # - for condition reminders: use check.interval
-  # - for interval reminders: use interval
-  # We pick the smallest parsed duration across all reminders.
+  # - for condition reminders: use condition.interval
+  # - for interval reminders: use interval.duration
+  # We pick the smallest interval across all reminders.
   derivedCheckInterval =
     let
       reminders = cfg.settings.reminders;
-      candidates = lib.flatten (lib.mapAttrsToList (_: r:
-        if r.type == "condition" && r.check != null then [ r.check.interval ]
-        else if r.type == "interval" && r.interval != null then [ r.interval ]
+      secs = lib.flatten (lib.mapAttrsToList (_: r:
+        if r.type == "condition" && r.condition != null then [ r.condition.interval ]
+        else if r.type == "interval" && r.interval != null then [ r.interval.duration ]
         else [ ]
       ) reminders);
-      secs = lib.filter (x: x != null) (map parseDurationSeconds candidates);
-      minSecs = if secs == [ ] then null else lib.lists.foldl' builtins.min (builtins.head secs) (builtins.tail secs);
+      minSecs = if secs == [ ] then null else lib.lists.foldl' lib.min (builtins.head secs) (builtins.tail secs);
     in
     if minSecs == null then null else "${toString minSecs}s";
 
@@ -72,10 +39,6 @@ let
     };
   });
 
-  snoozeType = lib.types.submodule ({ ... }: {
-    options.default = lib.mkOption { type = lib.types.str; description = "Default snooze duration (e.g. 10m, 2h, 1d)."; };
-  });
-
   actionType = lib.types.submodule ({ ... }: {
     options = {
       label = lib.mkOption { type = lib.types.nullOr lib.types.str; default = null; };
@@ -83,22 +46,35 @@ let
     };
   });
 
-  lastDoneType = lib.types.submodule ({ ... }: {
-    options.command = lib.mkOption {
-      type = lib.types.str;
-      description = "Shell command that prints unix seconds for last done.";
-    };
-  });
-
-  checkType = lib.types.submodule ({ ... }: {
+  intervalType = lib.types.submodule ({ ... }: {
     options = {
-      interval = lib.mkOption { type = lib.types.str; description = "How often to run the check command."; };
-      command = lib.mkOption { type = lib.types.str; description = "Shell command; exit 0 means true."; };
+      duration = lib.mkOption {
+        type = lib.types.ints.positive;
+        description = "Interval duration in seconds.";
+      };
+      lastDoneCommand = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Optional; shell command that prints unix seconds for last done.";
+      };
     };
   });
 
-  triggerType = lib.types.submodule ({ ... }: {
-    options.consecutive = lib.mkOption { type = lib.types.ints.positive; description = "Number of consecutive trues required."; };
+  conditionType = lib.types.submodule ({ ... }: {
+    options = {
+      interval = lib.mkOption {
+        type = lib.types.ints.positive;
+        description = "How often to run the condition check (seconds).";
+      };
+      command = lib.mkOption {
+        type = lib.types.str;
+        description = "Shell command; exit 0 means true.";
+      };
+      trigger = lib.mkOption {
+        type = lib.types.ints.positive;
+        description = "Number of consecutive trues required.";
+      };
+    };
   });
 
   reminderType = lib.types.submodule ({ ... }: {
@@ -109,33 +85,27 @@ let
       };
       label = lib.mkOption { type = lib.types.str; description = "Notification title."; };
 
+      # optional extras
+      snooze = lib.mkOption {
+        type = lib.types.nullOr lib.types.ints.positive;
+        default = null;
+        description = "Optional; snooze duration in seconds (default handled by remindd).";
+      };
+      action = lib.mkOption { type = lib.types.nullOr actionType; default = null; };
+
       # interval reminders
       interval = lib.mkOption {
-        type = lib.types.nullOr lib.types.str;
+        type = lib.types.nullOr intervalType;
         default = null;
-        description = "Interval duration (required when type=interval).";
-      };
-      lastDone = lib.mkOption {
-        type = lib.types.nullOr lastDoneType;
-        default = null;
-        description = "Optional; if omitted, remindd uses per-reminder state.lastDone.";
+        description = "Interval config (required when type=interval).";
       };
 
       # condition reminders
-      check = lib.mkOption {
-        type = lib.types.nullOr checkType;
+      condition = lib.mkOption {
+        type = lib.types.nullOr conditionType;
         default = null;
-        description = "Condition check config (required when type=condition).";
+        description = "Condition config (required when type=condition).";
       };
-      trigger = lib.mkOption {
-        type = lib.types.nullOr triggerType;
-        default = null;
-        description = "Condition trigger config (required when type=condition).";
-      };
-
-      # optional extras
-      snooze = lib.mkOption { type = lib.types.nullOr snoozeType; default = null; };
-      action = lib.mkOption { type = lib.types.nullOr actionType; default = null; };
     };
   });
 
@@ -168,12 +138,15 @@ in
     settings = lib.mkOption {
       type = settingsType;
       default = { };
-      description = "remindd config as a typed Nix attribute set (written as YAML).";
+      description = "remindd config as a typed Nix attribute set.";
     };
   };
 
   config = lib.mkIf cfg.enable {
-    home.packages = [ cfg.package ];
+    home.packages = [
+      cfg.package
+      pkgs.libnotify
+    ];
 
     assertions = [
       {
@@ -190,13 +163,13 @@ in
       message = "programs.remindd.settings.reminders.${name}: interval is required when type=interval";
     }) cfg.settings.reminders)
     ++ (lib.mapAttrsToList (name: r: {
-      assertion = (r.type == "condition") -> (r.check != null && r.trigger != null);
-      message = "programs.remindd.settings.reminders.${name}: check and trigger are required when type=condition";
+      assertion = (r.type == "condition") -> (r.condition != null);
+      message = "programs.remindd.settings.reminders.${name}: condition is required when type=condition";
     }) cfg.settings.reminders)
     ++ [
       {
         assertion = derivedCheckInterval != null;
-        message = "could not derive timer interval from settings (use durations like 30s/5m/1h/2d/1w or combinations like 1h30m)";
+        message = "could not derive timer interval from settings (ensure reminders include interval.duration or condition.interval)";
       }
     ];
 

@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	"remindd/internal/config"
 	"remindd/internal/core"
-	"remindd/internal/duration"
 	"remindd/internal/exitcode"
 	"remindd/internal/state"
 )
@@ -43,12 +43,12 @@ func Run(argv []string, stdout, stderr io.Writer) int {
 }
 
 func printUsage(w io.Writer) {
-	fmt.Fprintln(w, "remindd v1")
+	fmt.Fprintln(w, "remindd")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Usage:")
 	fmt.Fprintln(w, "  remindd check")
 	fmt.Fprintln(w, "  remindd run <name>")
-	fmt.Fprintln(w, "  remindd snooze <name> <duration>")
+	fmt.Fprintln(w, "  remindd snooze <name> <seconds>")
 	fmt.Fprintln(w, "  remindd list")
 }
 
@@ -116,16 +116,17 @@ func runSnooze(args []string, now time.Time, stdout, stderr io.Writer) int {
 		return exitcode.ConfigError
 	}
 	if fs.NArg() != 2 {
-		fmt.Fprintln(stderr, "usage: remindd snooze <name> <duration>")
+		fmt.Fprintln(stderr, "usage: remindd snooze <name> <seconds>")
 		return exitcode.ConfigError
 	}
 	name := fs.Arg(0)
-	durStr := fs.Arg(1)
-	dur, err := duration.Parse(durStr)
-	if err != nil {
-		fmt.Fprintf(stderr, "invalid duration %q: %v\n", durStr, err)
+	secStr := fs.Arg(1)
+	secs, err := strconv.ParseInt(secStr, 10, 64)
+	if err != nil || secs <= 0 {
+		fmt.Fprintf(stderr, "invalid seconds %q (expected positive integer)\n", secStr)
 		return exitcode.ConfigError
 	}
+	dur := time.Duration(secs) * time.Second
 
 	cfg, code := loadConfigOrExit(stderr)
 	if code != exitcode.OK {
@@ -136,7 +137,7 @@ func runSnooze(args []string, now time.Time, stdout, stderr io.Writer) int {
 	if err := engine.Snooze(now, name, dur); err != nil {
 		return mapErr(stderr, err)
 	}
-	fmt.Fprintf(stdout, "snoozed %s for %s\n", name, durStr)
+	fmt.Fprintf(stdout, "snoozed %s for %ds\n", name, secs)
 	return exitcode.OK
 }
 

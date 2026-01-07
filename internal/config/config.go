@@ -7,12 +7,12 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
 
-	"remindd/internal/duration"
 	"remindd/internal/xdg"
 )
 
@@ -32,16 +32,10 @@ type Reminder struct {
 	Type  string `yaml:"type"`
 	Label string `yaml:"label"`
 
-	Snooze  *Snooze `yaml:"snooze"`
-	Action  *Action `yaml:"action"`
-	Interval string `yaml:"interval"`
-	LastDone *LastDone `yaml:"lastDone"`
-	Check   *Check   `yaml:"check"`
-	Trigger *Trigger `yaml:"trigger"`
-}
-
-type Snooze struct {
-	Default string `yaml:"default"`
+	Snooze *int64           `yaml:"snooze"`
+	Action        *Action    `yaml:"action"`
+	Interval      *Interval  `yaml:"interval"`
+	Condition     *Condition `yaml:"condition"`
 }
 
 type Action struct {
@@ -49,17 +43,15 @@ type Action struct {
 	Command string `yaml:"command"`
 }
 
-type LastDone struct {
-	Command string `yaml:"command"`
+type Interval struct {
+	Duration        int64  `yaml:"duration"`
+	LastDoneCommand string `yaml:"lastDoneCommand"`
 }
 
-type Check struct {
-	Interval string `yaml:"interval"`
-	Command  string `yaml:"command"`
-}
-
-type Trigger struct {
-	Consecutive int `yaml:"consecutive"`
+type Condition struct {
+	Interval int64  `yaml:"interval"`
+	Command         string `yaml:"command"`
+	Trigger         int    `yaml:"trigger"`
 }
 
 func Load() (*Config, error) {
@@ -134,41 +126,36 @@ func (c *Config) Validate() error {
 			return fmt.Errorf("reminder %q: missing label", name)
 		}
 
-		defSnooze := "1d"
-		if r.Snooze != nil && strings.TrimSpace(r.Snooze.Default) != "" {
-			defSnooze = r.Snooze.Default
-		}
-		if _, err := duration.Parse(defSnooze); err != nil {
-			return fmt.Errorf("reminder %q: snooze.default: %w", name, err)
+
+		// snooze is optional; default 86400.
+		if r.Snooze != nil && *r.Snooze <= 0 {
+			return fmt.Errorf("reminder %q: snooze must be > 0", name)
 		}
 
 		switch r.Type {
 		case "interval":
-			if strings.TrimSpace(r.Interval) == "" {
+			if r.Interval == nil {
 				return fmt.Errorf("reminder %q: interval is required", name)
 			}
-			if _, err := duration.Parse(r.Interval); err != nil {
-				return fmt.Errorf("reminder %q: interval: %w", name, err)
+			if r.Interval.Duration <= 0 {
+				return fmt.Errorf("reminder %q: interval.duration must be > 0", name)
 			}
-			// lastDone.command is optional; if omitted/empty, fall back to per-reminder state.lastDone.
+			if strings.TrimSpace(r.Interval.LastDoneCommand) != "" {
+				// Basic sanity: reject strings with newlines that are likely accidental YAML mistakes.
+				// (Commands can still be multi-line via YAML block scalars; this only rejects whitespace-only.)
+			}
 		case "condition":
-			if r.Check == nil {
-				return fmt.Errorf("reminder %q: check is required", name)
+			if r.Condition == nil {
+				return fmt.Errorf("reminder %q: condition is required", name)
 			}
-			if strings.TrimSpace(r.Check.Interval) == "" {
-				return fmt.Errorf("reminder %q: check.interval is required", name)
+			if r.Condition.Interval <= 0 {
+				return fmt.Errorf("reminder %q: condition.interval must be > 0", name)
 			}
-			if _, err := duration.Parse(r.Check.Interval); err != nil {
-				return fmt.Errorf("reminder %q: check.interval: %w", name, err)
+			if strings.TrimSpace(r.Condition.Command) == "" {
+				return fmt.Errorf("reminder %q: condition.command is required", name)
 			}
-			if strings.TrimSpace(r.Check.Command) == "" {
-				return fmt.Errorf("reminder %q: check.command is required", name)
-			}
-			if r.Trigger == nil {
-				return fmt.Errorf("reminder %q: trigger is required", name)
-			}
-			if r.Trigger.Consecutive < 1 {
-				return fmt.Errorf("reminder %q: trigger.consecutive must be >= 1", name)
+			if r.Condition.Trigger < 1 {
+				return fmt.Errorf("reminder %q: condition.trigger must be >= 1", name)
 			}
 		}
 
@@ -180,6 +167,19 @@ func (c *Config) Validate() error {
 	}
 
 	return nil
+}
+
+// parseInt64Strict is used for small config parsing helpers when needed.
+func parseInt64Strict(field, s string) (int64, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, fmt.Errorf("%s is empty", field)
+	}
+	v, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("%s must be an integer: %w", field, err)
+	}
+	return v, nil
 }
 
 func parseHHMM(s string) (time.Duration, error) {

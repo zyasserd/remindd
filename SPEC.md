@@ -1,4 +1,4 @@
-# remindd v1 — Specification (Implementation Handoff)
+# remindd v2 — Specification (Implementation Handoff)
 
 ## 1. Overview
 
@@ -16,7 +16,7 @@
 - **Reminder**: named config entry that may become due.
 - **Check cycle**: one execution of `remindd check`.
 - **Now**: the current wall-clock time (local timezone) at time of evaluation.
-- **Reference time**: not separately defined in v1; interval reminders use `lastDone.command` as their last-done reference.
+- **Reference time**: for interval reminders, the “last done” time comes from either `interval.lastDoneCommand` (if set) or persisted state.
 - **Notification window**: global time-of-day range (local time) during which notifications are allowed.
 - **Action**: optional shell command to run when user triggers it.
 
@@ -32,6 +32,8 @@
 
 ```yaml
 notificationWindow:
+  # Optional. If omitted, notifications are allowed all day.
+  # To allow all day explicitly, set start == end (e.g. "00:00" / "00:00").
   start: "18:00"   # inclusive, 24-hour format, local time
   end: "22:00"     # exclusive, 24-hour format, local time
 
@@ -40,22 +42,21 @@ reminders:
     type: interval | condition
     label: string
     action: # optional
-      label: string         # optional; if omitted, use "Run"
-      command: string
-    snooze:
-      default: <duration>  # optional; default="1d"
+      label: string   # optional; default="Run"
+      command: string # required if action is present
+
+    snooze: integer # optional; default=86400 (seconds)
 
     # interval reminders only
-    interval: <duration>
-    lastDone:
-      command: string       # runs in shell; stdout is unix timestamp
+    interval:
+      duration: integer
+      lastDoneCommand: string  # optional; stdout is Unix epoch seconds
 
     # condition reminders only
-    check:
-      interval: <duration>  # minimum interval between evaluations
-      command: string       # exit code 0=true; non-zero=false
-    trigger:
-      consecutive: integer  # >= 1
+    condition:
+      interval: integer         # minimum interval between evaluations (seconds)
+      command: string           # exit code 0=true; non-zero=false
+      trigger: integer          # >= 1
 
 ```
 
@@ -72,30 +73,27 @@ reminders:
 **Label**
 - Required. Non-empty.
 
-**Duration format (v1)**
-- Accept Go `time.ParseDuration` formats (e.g. `"30m"`, `"1h"`) **plus**:
-  - `Nd` meaning N * 24h
-  - `Nw` meaning N * 7d
-- Integers only for `d` and `w` suffixes (no decimals).
-- `check.interval`, `interval`, `snooze.default` must be > 0.
+**Durations (v2)**
+- All durations are integers in seconds.
+- `interval.duration`, `condition.interval`, and `snooze` must be > 0.
 
 **Commands**
 - Executed via the system shell (`/bin/sh -c <command>`).
 - The tool must not interpret stdout except where specified.
 
 **Interval reminder requirements**
-- Required: `interval`.
-- Optional: `lastDone.command`.
-- If `lastDone.command` is omitted or empty, `remindd` uses the persisted per-reminder state field `lastDone` as the last-done reference time (missing/null => `0`).
-- Forbidden/ignored: `check`, `trigger`.
+- Required: `interval.duration`.
+- Optional: `interval.lastDoneCommand`.
+- If `interval.lastDoneCommand` is omitted or empty, `remindd` uses the persisted per-reminder state field `lastDone` as the last-done reference time (missing/null => `0`).
+- Forbidden/ignored: `condition`.
 
 **Condition reminder requirements**
-- Required: `check.interval`, `check.command`, `trigger.consecutive`.
-- `trigger.consecutive` must be >= 1.
-- Forbidden/ignored: `interval`, `lastDone`.
+- Required: `condition.interval`, `condition.command`, `condition.trigger`.
+- `condition.trigger` must be >= 1.
+- Forbidden/ignored: `interval`.
 
 **Snooze**
-- `snooze.default` optional; default `1d`.
+- `snooze` optional; default `86400`.
 
 **Notification window**
 - Optional. If missing, notifications are allowed at any time.
@@ -152,8 +150,8 @@ lastCheckAt: <unix timestamp> | null   # used for condition check.interval gatin
     - condition: reset `trueStreak=0`, `firstTrueAt=null`.
     - clear `snoozedUntil`.
 
-- `remindd snooze <name> <duration>`
-  - Set `snoozedUntil = now + duration`.
+- `remindd snooze <name> <seconds>`
+  - Set `snoozedUntil = now + seconds`.
 
 - `remindd list`
   - Print all reminders and key state and whether due/overdue.
@@ -178,20 +176,20 @@ lastCheckAt: <unix timestamp> | null   # used for condition check.interval gatin
 ### 6.2 Interval reminders
 
 1. Determine `lastDone` (unix seconds):
-  - If `lastDone.command` is present and non-empty: execute it and parse stdout as a Unix timestamp.
+  - If `interval.lastDoneCommand` is present and non-empty: execute it and parse stdout as a Unix timestamp in seconds since the Unix epoch.
     - Ignore surrounding whitespace.
     - On parse failure: treat as config error.
   - Otherwise: read `lastDone` from the per-reminder state file (missing/null => `0`).
 3. Compute:
-   - `dueAt = lastDone + interval`
+  - `dueAt = lastDone + interval.duration`
    - `overdue = now - dueAt`
 4. Due if `overdue > 0`.
 5. Body text: `Overdue by X` where X is a human readable duration rounded down to minutes, but if >= 24h show whole days.
 
 ### 6.3 Condition reminders
 
-1. If `lastCheckAt != null` and `now - lastCheckAt < check.interval`: skip running command; do not change streak; not due.
-2. Run `check.command`.
+1. If `lastCheckAt != null` and `now - lastCheckAt < condition.interval`: skip running command; do not change streak; not due.
+2. Run `condition.command`.
    - exit code `0` => true
    - any other exit code => false
    - spawn failure => treat as config error.
@@ -203,7 +201,7 @@ lastCheckAt: <unix timestamp> | null   # used for condition check.interval gatin
    - If false:
      - `trueStreak = 0`
      - `firstTrueAt = null`
-4. Due if `trueStreak >= trigger.consecutive`.
+4. Due if `trueStreak >= condition.trigger`.
 5. Body text: `Condition true for <trueStreak> consecutive checks`.
 
 ### 6.4 Snooze
@@ -224,7 +222,7 @@ lastCheckAt: <unix timestamp> | null   # used for condition check.interval gatin
 - Body is computed per reminder type.
 - Actions:
   - If `action.command` exists, provide an action button labeled `action.label` (or `Run`) that triggers `remindd run <name>`.
-  - Always provide a snooze action button that triggers `remindd snooze <name> <defaultDuration>`.
+  - Always provide a snooze action button that triggers `remindd snooze <name> <snooze>`.
 
 **Execution model for actions**
 - Notifications invoke `remindd` commands, not arbitrary commands directly.
@@ -247,30 +245,28 @@ reminders:
   systemUpdates:
     type: interval
     label: "Update your NixOS system"
-    interval: 3w
-    lastDone:
-      command: stat -c %Y /etc/nixos/flake.lock || echo 0
+    snooze: 86400
+    interval:
+      duration: 1814400 # 3w
+      lastDoneCommand: stat -c %Y /etc/nixos/flake.lock || echo 0
     action:
       label: "Run update"
       command: "nixos-rebuild switch"
-    snooze:
-      default: 1d
 
   backups:
     type: interval
     label: "Run backups"
-    interval: 7d
-    lastDone:
-      command: kopia last-snapshot || echo 0
+    interval:
+      duration: 604800 # 7d
+      lastDoneCommand: kopia last-snapshot || echo 0
     action:
       command: "kopia snapshot create"
 
   powerSaver:
     type: condition
     label: "Power saver off too long"
-    check:
-      interval: 30m
+    condition:
+      interval: 1800 # 30m
       command: "powerprofilesctl get | grep -vq power-saver"
-    trigger:
-      consecutive: 12
+      trigger: 12
 ```
