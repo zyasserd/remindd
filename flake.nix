@@ -8,7 +8,7 @@
 
   outputs = { self, nixpkgs, utils }:
     let
-      hmModule = import ./nix/home-manager-module.nix;
+      hmModule = import ./nix/home-manager.nix;
     in
     {
       homeManagerModules.remindd = { pkgs, ... }:
