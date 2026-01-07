@@ -25,7 +25,7 @@
           pname = "remindd";
           version = "0.1.0";
 
-          src = ../.;
+          src = ./.;
 
           vendorHash = "sha256-g+yaVIx4jxpAQ/+WrGKxhVeliYx7nLQe/zsGpxV4Fn4=";
 
