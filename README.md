@@ -104,20 +104,19 @@ Example `home.nix`:
 
 	imports = [ inputs.remindd.homeManagerModules.remindd ];
 
-	programs.remindd = {
+	services.remindd = {
 		enable = true;
 
-		# Required: config as a typed Nix attrset (written to $XDG_CONFIG_HOME/remindd/config.yaml)
-		settings = {
-			notifyWindow = {
-				from = "18:00";
-				to = "22:00";
-			};
-			reminders = { };
+		# typed config (written to $XDG_CONFIG_HOME/remindd/config.yaml)
+		notifyWindow = {
+			from = "18:00";
+			to = "22:00";
 		};
+		reminders = { };
 	};
 }
 ```
+
 
 ## Example + smoke test
 

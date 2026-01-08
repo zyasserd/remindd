@@ -1,7 +1,7 @@
 { config, lib, pkgs, remindd, ... }:
 
 let
-  cfg = config.programs.remindd;
+  cfg = config.services.remindd;
 
   # Config file location is defined by remindd itself:
   # - $XDG_CONFIG_HOME/remindd/config.yaml (fallback: ~/.config/remindd/config.yaml)
@@ -17,7 +17,7 @@ let
   # We pick the smallest interval across all reminders.
   derivedCheckInterval =
     let
-      reminders = cfg.settings.reminders;
+      reminders = cfg.reminders;
       secs = lib.flatten (lib.mapAttrsToList (_: r: [ r.every ]) reminders);
       minSecs = if secs == [ ] then null else lib.lists.foldl' lib.min (builtins.head secs) (builtins.tail secs);
     in
@@ -82,30 +82,45 @@ let
     };
   });
 
-  settingsType = lib.types.submodule ({ ... }: {
-    options = {
-      notifyWindow = lib.mkOption {
-        type = lib.types.nullOr notifyWindowType;
-        default = null;
-      };
-      reminders = lib.mkOption {
-        type = lib.types.attrsOf reminderType;
-        default = { };
-      };
-    };
-  });
+  settings = {
+    notifyWindow = cfg.notifyWindow;
+    reminders = cfg.reminders;
+  };
+
+  mkAssert = assertion: message: { inherit assertion message; };
+
+  mkReminderAssertions = reminders:
+    lib.flatten (lib.mapAttrsToList (name: r:
+      let
+        prefix = "services.remindd.reminders.${name}";
+      in
+      [
+        (mkAssert ((r.type != "condition") || (r.conditionCommand != null))
+          "${prefix}: conditionCommand is required when type=condition")
+        (mkAssert ((r.type != "condition") || (r.trigger != null))
+          "${prefix}: trigger is required when type=condition")
+        (mkAssert ((r.type == "condition") || (r.conditionCommand == null))
+          "${prefix}: conditionCommand is only allowed when type=condition")
+        (mkAssert ((r.type == "condition") || (r.trigger == null))
+          "${prefix}: trigger is only allowed when type=condition")
+      ]
+    ) reminders);
 
 in
 {
-  options.programs.remindd = {
+  options.services.remindd = {
     enable = lib.mkEnableOption "remindd";
 
-    # Configuration for remindd, expressed as Nix.
-    # This module writes it to $XDG_CONFIG_HOME/${configFilePath}.
-    settings = lib.mkOption {
-      type = settingsType;
+    notifyWindow = lib.mkOption {
+      type = lib.types.nullOr notifyWindowType;
+      default = null;
+      description = "Optional notification window (HH:MM local time).";
+    };
+
+    reminders = lib.mkOption {
+      type = lib.types.attrsOf reminderType;
       default = { };
-      description = "remindd config as a typed Nix attribute set.";
+      description = "remindd reminders as a typed Nix attribute set.";
     };
   };
 
@@ -115,42 +130,15 @@ in
       pkgs.libnotify
     ];
 
-    assertions = [
-      {
-        assertion = cfg.settings != { };
-        message = "programs.remindd.settings must be set (this module only supports settings-driven config)";
-      }
-      {
-        assertion = cfg.settings.reminders != { };
-        message = "programs.remindd.settings.reminders must not be empty";
-      }
-    ]
-    ++ (lib.mapAttrsToList (name: r: {
-      assertion = (r.type != "condition") || (r.conditionCommand != null);
-      message = "programs.remindd.settings.reminders.${name}: conditionCommand is required when type=condition";
-    }) cfg.settings.reminders)
-    ++ (lib.mapAttrsToList (name: r: {
-      assertion = (r.type != "condition") || (r.trigger != null);
-      message = "programs.remindd.settings.reminders.${name}: trigger is required when type=condition";
-    }) cfg.settings.reminders)
-    ++ (lib.mapAttrsToList (name: r: {
-      assertion = (r.type == "condition") || (r.conditionCommand == null);
-      message = "programs.remindd.settings.reminders.${name}: conditionCommand is only allowed when type=condition";
-    }) cfg.settings.reminders)
-    ++ (lib.mapAttrsToList (name: r: {
-      assertion = (r.type == "condition") || (r.trigger == null);
-      message = "programs.remindd.settings.reminders.${name}: trigger is only allowed when type=condition";
-    }) cfg.settings.reminders)
-    ++ [
-      {
-        assertion = derivedCheckInterval != null;
-        message = "could not derive timer interval from settings (ensure reminders include every)";
-      }
-    ];
+    assertions =
+      [
+        (mkAssert (cfg.reminders != { }) "services.remindd.reminders must not be empty")
+      ]
+      ++ (mkReminderAssertions cfg.reminders);
 
-    # Write config to the default location remindd expects.
+    # Write config to the default location remindd expects. 
     xdg.configFile."${configFilePath}" = {
-      source = yamlFormat.generate "remindd-config.yaml" cfg.settings;
+      source = yamlFormat.generate "remindd-config.yaml" settings;
     };
 
     # Automatically run `remindd check` on a user timer.
