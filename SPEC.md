@@ -84,7 +84,7 @@ reminders:
 - Required: `every`.
 - Optional: `lastDoneOverride`.
 - If `lastDoneOverride` is omitted or empty, `remindd` uses the persisted per-reminder state field `lastDone` as the last-done reference time (missing/null => `0`).
-- Forbidden/ignored: `conditionCommand`, `trigger`.
+- Forbidden (config error): `conditionCommand`, `trigger`.
 
 **Condition reminder requirements**
 - Required: `every`, `conditionCommand`, `trigger`.

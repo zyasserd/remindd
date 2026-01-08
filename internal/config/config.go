@@ -127,7 +127,12 @@ func (c *Config) Validate() error {
 
 		switch r.Type {
 		case "interval":
-			// no extra required fields
+			if strings.TrimSpace(r.ConditionCommand) != "" {
+				return fmt.Errorf("reminder %q: conditionCommand is only allowed for type=condition", name)
+			}
+			if r.Trigger != 0 {
+				return fmt.Errorf("reminder %q: trigger is only allowed for type=condition", name)
+			}
 		case "condition":
 			if strings.TrimSpace(r.ConditionCommand) == "" {
 				return fmt.Errorf("reminder %q: conditionCommand is required", name)

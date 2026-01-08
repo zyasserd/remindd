@@ -133,6 +133,14 @@ in
       assertion = (r.type != "condition") || (r.trigger != null);
       message = "programs.remindd.settings.reminders.${name}: trigger is required when type=condition";
     }) cfg.settings.reminders)
+    ++ (lib.mapAttrsToList (name: r: {
+      assertion = (r.type == "condition") || (r.conditionCommand == null);
+      message = "programs.remindd.settings.reminders.${name}: conditionCommand is only allowed when type=condition";
+    }) cfg.settings.reminders)
+    ++ (lib.mapAttrsToList (name: r: {
+      assertion = (r.type == "condition") || (r.trigger == null);
+      message = "programs.remindd.settings.reminders.${name}: trigger is only allowed when type=condition";
+    }) cfg.settings.reminders)
     ++ [
       {
         assertion = derivedCheckInterval != null;
