@@ -160,7 +160,8 @@ func (e *Engine) evalOne(now time.Time, name string, rc config.Reminder, st *sta
 		}
 
 		if st.TrueStreak >= rc.Trigger {
-			return true, fmt.Sprintf("Condition true for %d consecutive checks", st.TrueStreak), true, nil
+			required := time.Duration(rc.Trigger) * checkInterval
+			return true, fmt.Sprintf("Condition true for at least %s", formatUntil(required)), true, nil
 		}
 		return false, "", true, nil
 
