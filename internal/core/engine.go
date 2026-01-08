@@ -191,19 +191,9 @@ func (e *Engine) runActionWithState(now time.Time, name string, rc config.Remind
 	if rc.Action == nil || strings.TrimSpace(rc.Action.Command) == "" {
 		return &ExitError{Code: exitcode.ConfigError, Message: fmt.Sprintf("%s: no action configured", name)}
 	}
-	res, err := shell.Run(rc.Action.Command)
-	if err != nil {
-		return &ExitError{Code: exitcode.ActionFail, Message: fmt.Sprintf("%s: action failed: %v", name, err)}
-	}
-	if res.ExitCode != 0 {
-		msg := strings.TrimSpace(res.Stderr)
-		if msg == "" {
-			msg = strings.TrimSpace(res.Stdout)
-		}
-		if msg == "" {
-			msg = fmt.Sprintf("exit code %d", res.ExitCode)
-		}
-		return &ExitError{Code: exitcode.ActionFail, Message: fmt.Sprintf("%s: action failed: %s", name, msg)}
+	// Actions are fire-and-forget: start detached and consider success as "started".
+	if err := shell.RunDetached(rc.Action.Command); err != nil {
+		return &ExitError{Code: exitcode.ActionFail, Message: fmt.Sprintf("%s: action failed to start: %v", name, err)}
 	}
 
 	nowUnix := now.Unix()

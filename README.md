@@ -83,6 +83,10 @@ See `SPEC.md` for the full schema.
 
 Commands are executed via `/bin/sh -c`. If you need bash features, wrap with `bash -lc '...'`.
 
+### Action execution
+
+Actions are started via a detached launch (fire-and-forget). `remindd` considers an action successful if it starts successfully and will mark the reminder done immediately.
+
 ## State
 
 Per-reminder state files:

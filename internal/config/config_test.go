@@ -49,3 +49,19 @@ func TestValidateIntervalRejectsTrigger(t *testing.T) {
 		t.Fatalf("expected error, got nil")
 	}
 }
+
+func TestValidateActionPresentOk(t *testing.T) {
+	cfg := &Config{
+		Reminders: map[string]Reminder{
+			"a": {
+				Type:   "interval",
+				Label:  "A",
+				Every:  60,
+				Action: &Action{Command: "echo hi"},
+			},
+		},
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("expected ok, got %v", err)
+	}
+}

@@ -14,6 +14,14 @@ reminders:
       label: "Mark done"
       command: "echo demoInterval done"
 
+  osUpdate:
+    type: interval
+    label: "Update NixOS"
+    every: 1814400
+    action:
+      label: "Open /etc/nixos"
+      command: "code /etc/nixos"
+
   demoCondition:
     type: condition
     label: "Demo condition reminder"

@@ -227,6 +227,13 @@ lastCheckAt: <unix timestamp> | null   # used for condition every gating
 - Notifications invoke `remindd` commands, not arbitrary commands directly.
 - `remindd run` and `remindd snooze` are responsible for state changes.
 
+### Action start semantics
+
+Actions are fire-and-forget: `remindd` starts the configured `action.command` detached and considers it successful if it starts successfully (it does not wait for completion).
+
+- Preferred: `systemd-run --user --scope --collect /bin/sh -c <command>` (survives a systemd oneshot unit).
+- Fallback: start `/bin/sh -c <command>` in a new session.
+
 ## 8. Guarantees
 
 - `check` is idempotent with respect to a single execution (no duplicate notification per reminder).
