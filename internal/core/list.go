@@ -16,12 +16,26 @@ func (e *Engine) FormatListLine(now time.Time, name string, rc config.Reminder, 
 	}
 	snoozed := state.IsSnoozed(now, st)
 
-	dueStr := "no"
-	detail := ""
+	status := "OK"
+	freq := ""
+	info := ""
+	switch rc.Type {
+	case "interval":
+		if rc.Interval != nil {
+			freq = formatFrequencySeconds(rc.Interval.Duration)
+		}
+	case "condition":
+		if rc.Condition != nil {
+			freq = formatFrequencySeconds(rc.Condition.Interval)
+		}
+	}
 	if snoozed {
-		dueStr = "snoozed"
+		status = "SNOOZED"
+		if st != nil && st.SnoozedUntil != nil {
+			info = fmt.Sprintf("until %s", time.Unix(*st.SnoozedUntil, 0).Format(time.RFC3339))
+		}
 	} else if !inWindow {
-		dueStr = "outside-window"
+		status = "OUTSIDE_WINDOW"
 	} else {
 		switch rc.Type {
 		case "interval":
@@ -35,23 +49,68 @@ func (e *Engine) FormatListLine(now time.Time, name string, rc config.Reminder, 
 			}
 			dueAt := time.Unix(last, 0).Add(interval)
 			if now.After(dueAt) {
-				dueStr = "YES"
-				detail = formatIntervalBody(now.Sub(dueAt))
+				status = "DUE"
+				info = formatIntervalBody(now.Sub(dueAt))
 			} else {
-				detail = fmt.Sprintf("due at %s", dueAt.Format(time.RFC3339))
+				info = fmt.Sprintf("Due in %s", formatUntil(dueAt.Sub(now)))
 			}
 		case "condition":
 			if rc.Condition == nil {
 				return "", fmt.Errorf("%s: condition is required", name)
 			}
 			if st.TrueStreak >= rc.Condition.Trigger {
-				dueStr = "YES"
+				status = "DUE"
 			}
-			detail = fmt.Sprintf("streak=%d/%d", st.TrueStreak, rc.Condition.Trigger)
+			info = fmt.Sprintf("streak=%d/%d", st.TrueStreak, rc.Condition.Trigger)
 		}
 	}
 
 	// Keep stable, one-line output.
-	label := strings.ReplaceAll(rc.Label, "\n", " ")
-	return fmt.Sprintf("%s\t%s\t%s\t%s", name, rc.Type, dueStr, strings.TrimSpace(label+" "+detail)), nil
+	_ = strings.ReplaceAll(rc.Label, "\n", " ")
+	return fmt.Sprintf("%s\t%s\t%s\t%s\t%s", name, rc.Type, status, strings.TrimSpace(freq), strings.TrimSpace(info)), nil
+}
+
+func formatUntil(d time.Duration) string {
+	if d <= 0 {
+		return "<1 minute"
+	}
+	if d >= 24*time.Hour {
+		days := int64(d / (24 * time.Hour))
+		if days == 1 {
+			return "1 day"
+		}
+		return fmt.Sprintf("%d days", days)
+	}
+	if d >= time.Hour {
+		h := int64(d / time.Hour)
+		if h == 1 {
+			return "1 hour"
+		}
+		return fmt.Sprintf("%d hours", h)
+	}
+	if d < time.Minute {
+		return "<1 minute"
+	}
+	m := int64(d / time.Minute)
+	if m == 1 {
+		return "1 minute"
+	}
+	return fmt.Sprintf("%d minutes", m)
+}
+
+func formatFrequencySeconds(secs int64) string {
+	if secs <= 0 {
+		return ""
+	}
+	d := time.Duration(secs) * time.Second
+	if d%(24*time.Hour) == 0 {
+		return fmt.Sprintf("%dd", int64(d/(24*time.Hour)))
+	}
+	if d%time.Hour == 0 {
+		return fmt.Sprintf("%dh", int64(d/time.Hour))
+	}
+	if d%time.Minute == 0 {
+		return fmt.Sprintf("%dm", int64(d/time.Minute))
+	}
+	return fmt.Sprintf("%ds", secs)
 }

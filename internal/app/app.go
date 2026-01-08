@@ -4,9 +4,11 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
+	"text/tabwriter"
 	"time"
 
 	"remindd/internal/config"
@@ -161,6 +163,13 @@ func runList(args []string, now time.Time, stdout, stderr io.Writer) int {
 	sort.Strings(names)
 
 	engine := core.NewEngine(cfg)
+	out := stdout
+	var tw *tabwriter.Writer
+	if shouldPrintListHeader(stdout) {
+		tw = tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
+		out = tw
+		fmt.Fprintln(out, "NAME\tTYPE\tSTATUS\tFREQ\tINFO")
+	}
 	for _, name := range names {
 		rc := cfg.Reminders[name]
 		st, err := state.Load(name)
@@ -172,9 +181,24 @@ func runList(args []string, now time.Time, stdout, stderr io.Writer) int {
 		if err != nil {
 			return mapErr(stderr, err)
 		}
-		fmt.Fprintln(stdout, strings.TrimRight(line, "\n"))
+		fmt.Fprintln(out, strings.TrimRight(line, "\n"))
+	}
+	if tw != nil {
+		_ = tw.Flush()
 	}
 	return exitcode.OK
+}
+
+func shouldPrintListHeader(w io.Writer) bool {
+	f, ok := w.(*os.File)
+	if !ok {
+		return false
+	}
+	info, err := f.Stat()
+	if err != nil {
+		return false
+	}
+	return (info.Mode() & os.ModeCharDevice) != 0
 }
 
 func mapErr(stderr io.Writer, err error) int {

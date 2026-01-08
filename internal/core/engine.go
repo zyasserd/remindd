@@ -106,10 +106,10 @@ func (e *Engine) CheckAll(now time.Time) error {
 func (e *Engine) evalOne(now time.Time, name string, rc config.Reminder, st *state.State) (due bool, body string, changed bool, err error) {
 	switch rc.Type {
 	case "interval":
-			if rc.Interval == nil || rc.Interval.Duration <= 0 {
-				return false, "", false, &ExitError{Code: exitcode.ConfigError, Message: fmt.Sprintf("%s: interval.duration must be > 0", name)}
-			}
-			interval := time.Duration(rc.Interval.Duration) * time.Second
+		if rc.Interval == nil || rc.Interval.Duration <= 0 {
+			return false, "", false, &ExitError{Code: exitcode.ConfigError, Message: fmt.Sprintf("%s: interval.duration must be > 0", name)}
+		}
+		interval := time.Duration(rc.Interval.Duration) * time.Second
 		lastDoneUnix, err := e.resolveLastDoneUnix(rc, st)
 		if err != nil {
 			return false, "", false, &ExitError{Code: exitcode.ConfigError, Message: fmt.Sprintf("%s: %v", name, err)}
@@ -123,13 +123,13 @@ func (e *Engine) evalOne(now time.Time, name string, rc config.Reminder, st *sta
 		return false, "", false, nil
 
 	case "condition":
-			if rc.Condition == nil {
-				return false, "", false, &ExitError{Code: exitcode.ConfigError, Message: fmt.Sprintf("%s: condition is required", name)}
-			}
-			if rc.Condition.Interval <= 0 {
-				return false, "", false, &ExitError{Code: exitcode.ConfigError, Message: fmt.Sprintf("%s: condition.interval must be > 0", name)}
-			}
-			checkInterval := time.Duration(rc.Condition.Interval) * time.Second
+		if rc.Condition == nil {
+			return false, "", false, &ExitError{Code: exitcode.ConfigError, Message: fmt.Sprintf("%s: condition is required", name)}
+		}
+		if rc.Condition.Interval <= 0 {
+			return false, "", false, &ExitError{Code: exitcode.ConfigError, Message: fmt.Sprintf("%s: condition.interval must be > 0", name)}
+		}
+		checkInterval := time.Duration(rc.Condition.Interval) * time.Second
 		if st.LastCheckAt != nil {
 			last := time.Unix(*st.LastCheckAt, 0)
 			if now.Sub(last) < checkInterval {
@@ -137,9 +137,9 @@ func (e *Engine) evalOne(now time.Time, name string, rc config.Reminder, st *sta
 			}
 		}
 
-			res, err := shell.Run(rc.Condition.Command)
+		res, err := shell.Run(rc.Condition.Command)
 		if err != nil {
-				return false, "", false, &ExitError{Code: exitcode.ConfigError, Message: fmt.Sprintf("%s: condition.command failed: %v", name, err)}
+			return false, "", false, &ExitError{Code: exitcode.ConfigError, Message: fmt.Sprintf("%s: condition.command failed: %v", name, err)}
 		}
 
 		nowUnix := now.Unix()
@@ -156,7 +156,7 @@ func (e *Engine) evalOne(now time.Time, name string, rc config.Reminder, st *sta
 			st.FirstTrueAt = nil
 		}
 
-			if st.TrueStreak >= rc.Condition.Trigger {
+		if st.TrueStreak >= rc.Condition.Trigger {
 			return true, fmt.Sprintf("Condition true for %d consecutive checks", st.TrueStreak), true, nil
 		}
 		return false, "", true, nil
@@ -262,6 +262,9 @@ func parseUnixSeconds(s string) (int64, error) {
 }
 
 func formatIntervalBody(overdue time.Duration) string {
+	if overdue <= 0 {
+		return "Due now"
+	}
 	if overdue >= 24*time.Hour {
 		days := int64(overdue / (24 * time.Hour))
 		if days == 1 {
@@ -276,8 +279,11 @@ func formatIntervalBody(overdue time.Duration) string {
 		}
 		return fmt.Sprintf("Overdue by %d hours", h)
 	}
+	if overdue < time.Minute {
+		return "Overdue by <1 minute"
+	}
 	m := int64(overdue / time.Minute)
-	if m <= 1 {
+	if m == 1 {
 		return "Overdue by 1 minute"
 	}
 	return fmt.Sprintf("Overdue by %d minutes", m)

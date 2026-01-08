@@ -1,5 +1,5 @@
 /remindd
 *.test
 *.out
-.direnv
+.direnv/
 result
