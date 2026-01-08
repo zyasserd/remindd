@@ -29,18 +29,17 @@ nix run .#remindd -- list
 Create `~/.config/remindd/config.yaml` (or set `REMINDD_CONFIG`):
 
 ```yaml
-notificationWindow:
-  start: "18:00"
-  end: "22:00"
+notifyWindow:
+	from: "18:00"
+	to: "22:00"
 
 reminders:
   demoInterval:
     type: interval
     label: "Stretch"
 		snooze: 3600
-		interval:
-			duration: 7200
-			# interval.lastDoneCommand is optional; if omitted, remindd uses per-reminder state.lastDone.
+		every: 7200
+		# lastDoneOverride is optional; if omitted, remindd uses per-reminder state.lastDone.
     action:
       label: "Done"
       command: "echo stretched"
@@ -75,12 +74,12 @@ See `SPEC.md` for the full schema.
 ### Reminder types
 
 
-- **interval**: due when `now > lastDone + interval.duration`
+- **interval**: due when `now > lastDone + every`
 	- last done source:
-		- `interval.lastDoneCommand` stdout (unix seconds), if configured
+		- `lastDoneOverride` stdout (unix seconds), if configured
 		- otherwise `state.lastDone` (missing/null => `0`)
 
-- **condition**: runs `condition.command` every `condition.interval`; due after `condition.trigger` successes
+- **condition**: runs `conditionCommand` every `every`; due after `trigger` consecutive successes
 
 Commands are executed via `/bin/sh -c`. If you need bash features, wrap with `bash -lc '...'`.
 
@@ -106,9 +105,9 @@ Example `home.nix`:
 
 		# Required: config as a typed Nix attrset (written to $XDG_CONFIG_HOME/remindd/config.yaml)
 		settings = {
-			notificationWindow = {
-				start = "18:00";
-				end = "22:00";
+			notifyWindow = {
+				from = "18:00";
+				to = "22:00";
 			};
 			reminders = { };
 		};

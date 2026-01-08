@@ -21,13 +21,9 @@ func (e *Engine) FormatListLine(now time.Time, name string, rc config.Reminder, 
 	info := ""
 	switch rc.Type {
 	case "interval":
-		if rc.Interval != nil {
-			freq = formatFrequencySeconds(rc.Interval.Duration)
-		}
+		freq = formatFrequencySeconds(rc.Every)
 	case "condition":
-		if rc.Condition != nil {
-			freq = formatFrequencySeconds(rc.Condition.Interval)
-		}
+		freq = formatFrequencySeconds(rc.Every)
 	}
 	if snoozed {
 		status = "SNOOZED"
@@ -39,10 +35,10 @@ func (e *Engine) FormatListLine(now time.Time, name string, rc config.Reminder, 
 	} else {
 		switch rc.Type {
 		case "interval":
-			if rc.Interval == nil || rc.Interval.Duration <= 0 {
-				return "", fmt.Errorf("%s: interval.duration must be > 0", name)
+			if rc.Every <= 0 {
+				return "", fmt.Errorf("%s: every must be > 0", name)
 			}
-			interval := time.Duration(rc.Interval.Duration) * time.Second
+			interval := time.Duration(rc.Every) * time.Second
 			last, err := e.resolveLastDoneUnix(rc, st)
 			if err != nil {
 				return "", err
@@ -55,13 +51,13 @@ func (e *Engine) FormatListLine(now time.Time, name string, rc config.Reminder, 
 				info = fmt.Sprintf("Due in %s", formatUntil(dueAt.Sub(now)))
 			}
 		case "condition":
-			if rc.Condition == nil {
-				return "", fmt.Errorf("%s: condition is required", name)
+			if rc.Trigger < 1 {
+				return "", fmt.Errorf("%s: trigger must be >= 1", name)
 			}
-			if st.TrueStreak >= rc.Condition.Trigger {
+			if st.TrueStreak >= rc.Trigger {
 				status = "DUE"
 			}
-			info = fmt.Sprintf("streak=%d/%d", st.TrueStreak, rc.Condition.Trigger)
+			info = fmt.Sprintf("streak=%d/%d", st.TrueStreak, rc.Trigger)
 		}
 	}
 

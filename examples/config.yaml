@@ -1,16 +1,15 @@
-notificationWindow:
-  start: "00:00"
-  end: "00:00"  # start==end => allow all day (per SPEC.md)
+notifyWindow:
+  from: "00:00"
+  to: "00:00"  # from==to => allow all day (per SPEC.md)
 
 reminders:
   demoInterval:
     type: interval
     label: "Demo interval reminder"
     snooze: 7200
-    interval:
-      duration: 86400
-      # interval.lastDoneCommand is optional; if omitted, remindd uses state.lastDone (missing/null => 0).
-      lastDoneCommand: "echo 0"
+    every: 86400
+    # lastDoneOverride is optional; if omitted, remindd uses state.lastDone (missing/null => 0).
+    lastDoneOverride: "echo 0"
     action:
       label: "Mark done"
       command: "echo demoInterval done"
@@ -19,10 +18,9 @@ reminders:
     type: condition
     label: "Demo condition reminder"
     snooze: 1800
-    condition:
-      interval: 60
-      command: "true"   # exit 0 => true
-      trigger: 1
+    every: 60
+    conditionCommand: "true"   # exit 0 => true
+    trigger: 1
     action:
       label: "Reset"
       command: "echo demoCondition reset"

@@ -13,7 +13,7 @@ func TestFormatListLine_IntervalDue(t *testing.T) {
 	cfg := &config.Config{Reminders: map[string]config.Reminder{}}
 	eng := NewEngine(cfg)
 
-	rc := config.Reminder{Type: "interval", Label: "Stretch", Interval: &config.Interval{Duration: 60}}
+	rc := config.Reminder{Type: "interval", Label: "Stretch", Every: 60}
 	st := &state.State{} // lastDone missing => 0
 	now := time.Unix(100, 0).UTC()
 
@@ -40,7 +40,7 @@ func TestFormatListLine_IntervalNotDue(t *testing.T) {
 	cfg := &config.Config{Reminders: map[string]config.Reminder{}}
 	eng := NewEngine(cfg)
 
-	rc := config.Reminder{Type: "interval", Label: "Stretch", Interval: &config.Interval{Duration: 3600}}
+	rc := config.Reminder{Type: "interval", Label: "Stretch", Every: 3600}
 	st := &state.State{}
 	now := time.Unix(100, 0).UTC()
 
@@ -64,7 +64,7 @@ func TestFormatListLine_SnoozedShowsUntil(t *testing.T) {
 	cfg := &config.Config{Reminders: map[string]config.Reminder{}}
 	eng := NewEngine(cfg)
 
-	rc := config.Reminder{Type: "interval", Label: "Stretch", Interval: &config.Interval{Duration: 60}}
+	rc := config.Reminder{Type: "interval", Label: "Stretch", Every: 60}
 	now := time.Unix(100, 0).UTC()
 	until := now.Add(1 * time.Hour).Unix()
 	st := &state.State{SnoozedUntil: &until}
@@ -86,10 +86,10 @@ func TestFormatListLine_SnoozedShowsUntil(t *testing.T) {
 }
 
 func TestFormatListLine_OutsideWindow(t *testing.T) {
-	cfg := &config.Config{NotificationWindow: &config.NotificationWindow{Start: "18:00", End: "22:00"}, Reminders: map[string]config.Reminder{}}
+	cfg := &config.Config{NotifyWindow: &config.NotifyWindow{From: "18:00", To: "22:00"}, Reminders: map[string]config.Reminder{}}
 	eng := NewEngine(cfg)
 
-	rc := config.Reminder{Type: "condition", Label: "Thing", Condition: &config.Condition{Interval: 60, Command: "true", Trigger: 2}}
+	rc := config.Reminder{Type: "condition", Label: "Thing", Every: 60, ConditionCommand: "true", Trigger: 2}
 	st := &state.State{}
 	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.Local)
 
@@ -110,7 +110,7 @@ func TestFormatListLine_LabelSingleLine(t *testing.T) {
 	cfg := &config.Config{Reminders: map[string]config.Reminder{}}
 	eng := NewEngine(cfg)
 
-	rc := config.Reminder{Type: "interval", Label: "Line1\nLine2", Interval: &config.Interval{Duration: 60}}
+	rc := config.Reminder{Type: "interval", Label: "Line1\nLine2", Every: 60}
 	st := &state.State{}
 	now := time.Unix(100, 0).UTC()
 

@@ -19,39 +19,30 @@ import (
 var nameRe = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 
 type Config struct {
-	NotificationWindow *NotificationWindow `yaml:"notificationWindow"`
-	Reminders          map[string]Reminder `yaml:"reminders"`
+	NotifyWindow *NotifyWindow       `yaml:"notifyWindow"`
+	Reminders    map[string]Reminder `yaml:"reminders"`
 }
 
-type NotificationWindow struct {
-	Start string `yaml:"start"`
-	End   string `yaml:"end"`
+type NotifyWindow struct {
+	From string `yaml:"from"`
+	To   string `yaml:"to"`
 }
 
 type Reminder struct {
 	Type  string `yaml:"type"`
 	Label string `yaml:"label"`
 
-	Snooze *int64           `yaml:"snooze"`
-	Action        *Action    `yaml:"action"`
-	Interval      *Interval  `yaml:"interval"`
-	Condition     *Condition `yaml:"condition"`
+	Action           *Action `yaml:"action"`
+	Snooze           *int64  `yaml:"snooze"`
+	LastDoneOverride string  `yaml:"lastDoneOverride"`
+	Every            int64   `yaml:"every"`
+	ConditionCommand string  `yaml:"conditionCommand"`
+	Trigger          int     `yaml:"trigger"`
 }
 
 type Action struct {
 	Label   string `yaml:"label"`
 	Command string `yaml:"command"`
-}
-
-type Interval struct {
-	Duration        int64  `yaml:"duration"`
-	LastDoneCommand string `yaml:"lastDoneCommand"`
-}
-
-type Condition struct {
-	Interval int64  `yaml:"interval"`
-	Command         string `yaml:"command"`
-	Trigger         int    `yaml:"trigger"`
 }
 
 func Load() (*Config, error) {
@@ -86,15 +77,15 @@ func ConfigPath() (string, error) {
 }
 
 func (c *Config) Validate() error {
-	if c.NotificationWindow != nil {
-		if strings.TrimSpace(c.NotificationWindow.Start) == "" || strings.TrimSpace(c.NotificationWindow.End) == "" {
-			return errors.New("notificationWindow requires start and end")
+	if c.NotifyWindow != nil {
+		if strings.TrimSpace(c.NotifyWindow.From) == "" || strings.TrimSpace(c.NotifyWindow.To) == "" {
+			return errors.New("notifyWindow requires from and to")
 		}
-		if _, err := parseHHMM(c.NotificationWindow.Start); err != nil {
-			return fmt.Errorf("notificationWindow.start: %w", err)
+		if _, err := parseHHMM(c.NotifyWindow.From); err != nil {
+			return fmt.Errorf("notifyWindow.from: %w", err)
 		}
-		if _, err := parseHHMM(c.NotificationWindow.End); err != nil {
-			return fmt.Errorf("notificationWindow.end: %w", err)
+		if _, err := parseHHMM(c.NotifyWindow.To); err != nil {
+			return fmt.Errorf("notifyWindow.to: %w", err)
 		}
 	}
 
@@ -126,36 +117,23 @@ func (c *Config) Validate() error {
 			return fmt.Errorf("reminder %q: missing label", name)
 		}
 
-
 		// snooze is optional; default 86400.
 		if r.Snooze != nil && *r.Snooze <= 0 {
 			return fmt.Errorf("reminder %q: snooze must be > 0", name)
 		}
+		if r.Every <= 0 {
+			return fmt.Errorf("reminder %q: every must be > 0", name)
+		}
 
 		switch r.Type {
 		case "interval":
-			if r.Interval == nil {
-				return fmt.Errorf("reminder %q: interval is required", name)
-			}
-			if r.Interval.Duration <= 0 {
-				return fmt.Errorf("reminder %q: interval.duration must be > 0", name)
-			}
-			if strings.TrimSpace(r.Interval.LastDoneCommand) != "" {
-				// Basic sanity: reject strings with newlines that are likely accidental YAML mistakes.
-				// (Commands can still be multi-line via YAML block scalars; this only rejects whitespace-only.)
-			}
+			// no extra required fields
 		case "condition":
-			if r.Condition == nil {
-				return fmt.Errorf("reminder %q: condition is required", name)
+			if strings.TrimSpace(r.ConditionCommand) == "" {
+				return fmt.Errorf("reminder %q: conditionCommand is required", name)
 			}
-			if r.Condition.Interval <= 0 {
-				return fmt.Errorf("reminder %q: condition.interval must be > 0", name)
-			}
-			if strings.TrimSpace(r.Condition.Command) == "" {
-				return fmt.Errorf("reminder %q: condition.command is required", name)
-			}
-			if r.Condition.Trigger < 1 {
-				return fmt.Errorf("reminder %q: condition.trigger must be >= 1", name)
+			if r.Trigger < 1 {
+				return fmt.Errorf("reminder %q: trigger must be >= 1", name)
 			}
 		}
 
@@ -212,14 +190,14 @@ func parseHHMM(s string) (time.Duration, error) {
 }
 
 func (c *Config) InNotificationWindow(t time.Time) (bool, error) {
-	if c.NotificationWindow == nil {
+	if c.NotifyWindow == nil {
 		return true, nil
 	}
-	start, err := parseHHMM(c.NotificationWindow.Start)
+	start, err := parseHHMM(c.NotifyWindow.From)
 	if err != nil {
 		return false, err
 	}
-	end, err := parseHHMM(c.NotificationWindow.End)
+	end, err := parseHHMM(c.NotifyWindow.To)
 	if err != nil {
 		return false, err
 	}

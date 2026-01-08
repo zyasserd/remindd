@@ -6,7 +6,7 @@ import (
 )
 
 func TestWindowWrapAround(t *testing.T) {
-	cfg := &Config{NotificationWindow: &NotificationWindow{Start: "22:00", End: "06:00"}}
+	cfg := &Config{NotifyWindow: &NotifyWindow{From: "22:00", To: "06:00"}}
 	in, err := cfg.InNotificationWindow(time.Date(2026, 1, 1, 23, 0, 0, 0, time.Local))
 	if err != nil {
 		t.Fatal(err)

@@ -6,10 +6,10 @@ func TestValidateIntervalWithoutLastDoneCommand(t *testing.T) {
 	cfg := &Config{
 		Reminders: map[string]Reminder{
 			"a": {
-				Type:     "interval",
-				Label:    "A",
-				Interval: &Interval{Duration: 86400},
-				// interval.lastDoneCommand omitted => OK
+				Type:  "interval",
+				Label: "A",
+				Every: 86400,
+				// lastDoneOverride omitted => OK
 			},
 		},
 	}

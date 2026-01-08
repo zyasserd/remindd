@@ -13,17 +13,12 @@ let
   checkServiceName = "remindd-check";
 
   # Derive the check interval from settings:
-  # - for condition reminders: use condition.interval
-  # - for interval reminders: use interval.duration
+  # - use reminder.every for all reminders
   # We pick the smallest interval across all reminders.
   derivedCheckInterval =
     let
       reminders = cfg.settings.reminders;
-      secs = lib.flatten (lib.mapAttrsToList (_: r:
-        if r.type == "condition" && r.condition != null then [ r.condition.interval ]
-        else if r.type == "interval" && r.interval != null then [ r.interval.duration ]
-        else [ ]
-      ) reminders);
+      secs = lib.flatten (lib.mapAttrsToList (_: r: [ r.every ]) reminders);
       minSecs = if secs == [ ] then null else lib.lists.foldl' lib.min (builtins.head secs) (builtins.tail secs);
     in
     if minSecs == null then null else "${toString minSecs}s";
@@ -32,10 +27,10 @@ let
   onBootSec = "2m";
 
   # Typed schema for settings (this is the remindd config, expressed as Nix).
-  notificationWindowType = lib.types.submodule ({ ... }: {
+  notifyWindowType = lib.types.submodule ({ ... }: {
     options = {
-      start = lib.mkOption { type = lib.types.str; description = "HH:MM"; };
-      end = lib.mkOption { type = lib.types.str; description = "HH:MM"; };
+      from = lib.mkOption { type = lib.types.str; description = "HH:MM"; };
+      to = lib.mkOption { type = lib.types.str; description = "HH:MM"; };
     };
   });
 
@@ -43,37 +38,6 @@ let
     options = {
       label = lib.mkOption { type = lib.types.nullOr lib.types.str; default = null; };
       command = lib.mkOption { type = lib.types.str; description = "Shell command to run for the action."; };
-    };
-  });
-
-  intervalType = lib.types.submodule ({ ... }: {
-    options = {
-      duration = lib.mkOption {
-        type = lib.types.ints.positive;
-        description = "Interval duration in seconds.";
-      };
-      lastDoneCommand = lib.mkOption {
-        type = lib.types.nullOr lib.types.str;
-        default = null;
-        description = "Optional; shell command that prints unix seconds for last done.";
-      };
-    };
-  });
-
-  conditionType = lib.types.submodule ({ ... }: {
-    options = {
-      interval = lib.mkOption {
-        type = lib.types.ints.positive;
-        description = "How often to run the condition check (seconds).";
-      };
-      command = lib.mkOption {
-        type = lib.types.str;
-        description = "Shell command; exit 0 means true.";
-      };
-      trigger = lib.mkOption {
-        type = lib.types.ints.positive;
-        description = "Number of consecutive trues required.";
-      };
     };
   });
 
@@ -93,26 +57,35 @@ let
       };
       action = lib.mkOption { type = lib.types.nullOr actionType; default = null; };
 
-      # interval reminders
-      interval = lib.mkOption {
-        type = lib.types.nullOr intervalType;
-        default = null;
-        description = "Interval config (required when type=interval).";
+      every = lib.mkOption {
+        type = lib.types.ints.positive;
+        description = "How often to execute (seconds).";
       };
 
-      # condition reminders
-      condition = lib.mkOption {
-        type = lib.types.nullOr conditionType;
+      lastDoneOverride = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
         default = null;
-        description = "Condition config (required when type=condition).";
+        description = "Optional; shell command that prints unix seconds for last done (overrides state.lastDone).";
+      };
+
+      conditionCommand = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Condition reminders only; shell command where exit 0 means true.";
+      };
+
+      trigger = lib.mkOption {
+        type = lib.types.nullOr lib.types.ints.positive;
+        default = null;
+        description = "Condition reminders only; number of consecutive trues required.";
       };
     };
   });
 
   settingsType = lib.types.submodule ({ ... }: {
     options = {
-      notificationWindow = lib.mkOption {
-        type = lib.types.nullOr notificationWindowType;
+      notifyWindow = lib.mkOption {
+        type = lib.types.nullOr notifyWindowType;
         default = null;
       };
       reminders = lib.mkOption {
@@ -153,17 +126,17 @@ in
       }
     ]
     ++ (lib.mapAttrsToList (name: r: {
-      assertion = (r.type == "interval") -> (r.interval != null);
-      message = "programs.remindd.settings.reminders.${name}: interval is required when type=interval";
+      assertion = (r.type != "condition") || (r.conditionCommand != null);
+      message = "programs.remindd.settings.reminders.${name}: conditionCommand is required when type=condition";
     }) cfg.settings.reminders)
     ++ (lib.mapAttrsToList (name: r: {
-      assertion = (r.type == "condition") -> (r.condition != null);
-      message = "programs.remindd.settings.reminders.${name}: condition is required when type=condition";
+      assertion = (r.type != "condition") || (r.trigger != null);
+      message = "programs.remindd.settings.reminders.${name}: trigger is required when type=condition";
     }) cfg.settings.reminders)
     ++ [
       {
         assertion = derivedCheckInterval != null;
-        message = "could not derive timer interval from settings (ensure reminders include interval.duration or condition.interval)";
+        message = "could not derive timer interval from settings (ensure reminders include every)";
       }
     ];
 

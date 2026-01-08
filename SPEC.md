@@ -16,7 +16,7 @@
 - **Reminder**: named config entry that may become due.
 - **Check cycle**: one execution of `remindd check`.
 - **Now**: the current wall-clock time (local timezone) at time of evaluation.
-- **Reference time**: for interval reminders, the “last done” time comes from either `interval.lastDoneCommand` (if set) or persisted state.
+- **Reference time**: for interval reminders, the “last done” time comes from either `lastDoneOverride` (if set) or persisted state.
 - **Notification window**: global time-of-day range (local time) during which notifications are allowed.
 - **Action**: optional shell command to run when user triggers it.
 
@@ -31,11 +31,11 @@
 ### 3.2 YAML schema
 
 ```yaml
-notificationWindow:
+notifyWindow:
   # Optional. If omitted, notifications are allowed all day.
-  # To allow all day explicitly, set start == end (e.g. "00:00" / "00:00").
-  start: "18:00"   # inclusive, 24-hour format, local time
-  end: "22:00"     # exclusive, 24-hour format, local time
+  # To allow all day explicitly, set from == to (e.g. "00:00" / "00:00").
+  from: "18:00"   # inclusive, 24-hour format, local time
+  to: "22:00"     # exclusive, 24-hour format, local time
 
 reminders:
   <name>:
@@ -47,16 +47,15 @@ reminders:
 
     snooze: integer # optional; default=86400 (seconds)
 
-    # interval reminders only
-    interval:
-      duration: integer
-      lastDoneCommand: string  # optional; stdout is Unix epoch seconds
+    # Optional. If present and non-empty, stdout is Unix epoch seconds and overrides the persisted `lastDone`.
+    lastDoneOverride: string
+
+    # how often to execute (interval) or attempt to execute in case of condition
+    every: integer
 
     # condition reminders only
-    condition:
-      interval: integer         # minimum interval between evaluations (seconds)
-      command: string           # exit code 0=true; non-zero=false
-      trigger: integer          # >= 1
+    conditionCommand: string  # exit code 0=true; non-zero=false
+    trigger: integer          # >= 1
 
 ```
 
@@ -75,34 +74,34 @@ reminders:
 
 **Durations (v2)**
 - All durations are integers in seconds.
-- `interval.duration`, `condition.interval`, and `snooze` must be > 0.
+- `every` and `snooze` must be > 0.
 
 **Commands**
 - Executed via the system shell (`/bin/sh -c <command>`).
 - The tool must not interpret stdout except where specified.
 
 **Interval reminder requirements**
-- Required: `interval.duration`.
-- Optional: `interval.lastDoneCommand`.
-- If `interval.lastDoneCommand` is omitted or empty, `remindd` uses the persisted per-reminder state field `lastDone` as the last-done reference time (missing/null => `0`).
-- Forbidden/ignored: `condition`.
+- Required: `every`.
+- Optional: `lastDoneOverride`.
+- If `lastDoneOverride` is omitted or empty, `remindd` uses the persisted per-reminder state field `lastDone` as the last-done reference time (missing/null => `0`).
+- Forbidden/ignored: `conditionCommand`, `trigger`.
 
 **Condition reminder requirements**
-- Required: `condition.interval`, `condition.command`, `condition.trigger`.
-- `condition.trigger` must be >= 1.
-- Forbidden/ignored: `interval`.
+- Required: `every`, `conditionCommand`, `trigger`.
+- `trigger` must be >= 1.
+- `lastDoneOverride` is allowed but ignored for condition evaluation.
 
 **Snooze**
 - `snooze` optional; default `86400`.
 
 **Notification window**
 - Optional. If missing, notifications are allowed at any time.
-- If present, both `start` and `end` are required.
+- If present, both `from` and `to` are required.
 - Times parsed as `HH:MM` (00:00–23:59), local time.
 - Window semantics:
-  - If `start < end`: allow `[start, end)`.
-  - If `start > end`: allow wrap-around `[start, 24:00) ∪ [00:00, end)`.
-  - If `start == end`: allow all day (treat as no restriction).
+  - If `from < to`: allow `[from, to)`.
+  - If `from > to`: allow wrap-around `[from, 24:00) ∪ [00:00, to)`.
+  - If `from == to`: allow all day (treat as no restriction).
 
 ## 4. Persistent State
 
@@ -125,7 +124,7 @@ trueStreak: integer
 firstTrueAt: <unix timestamp> | null
 snoozedUntil: <unix timestamp> | null
 lastNotifiedAt: <unix timestamp> | null
-lastCheckAt: <unix timestamp> | null   # used for condition check.interval gating
+lastCheckAt: <unix timestamp> | null   # used for condition every gating
 ```
 
 **Notes**
@@ -176,20 +175,20 @@ lastCheckAt: <unix timestamp> | null   # used for condition check.interval gatin
 ### 6.2 Interval reminders
 
 1. Determine `lastDone` (unix seconds):
-  - If `interval.lastDoneCommand` is present and non-empty: execute it and parse stdout as a Unix timestamp in seconds since the Unix epoch.
+  - If `lastDoneOverride` is present and non-empty: execute it and parse stdout as a Unix timestamp in seconds since the Unix epoch.
     - Ignore surrounding whitespace.
     - On parse failure: treat as config error.
   - Otherwise: read `lastDone` from the per-reminder state file (missing/null => `0`).
 3. Compute:
-  - `dueAt = lastDone + interval.duration`
+  - `dueAt = lastDone + every`
    - `overdue = now - dueAt`
 4. Due if `overdue > 0`.
 5. Body text: `Overdue by X` where X is a human readable duration rounded down to minutes, but if >= 24h show whole days.
 
 ### 6.3 Condition reminders
 
-1. If `lastCheckAt != null` and `now - lastCheckAt < condition.interval`: skip running command; do not change streak; not due.
-2. Run `condition.command`.
+1. If `lastCheckAt != null` and `now - lastCheckAt < every`: skip running command; do not change streak; not due.
+2. Run `conditionCommand`.
    - exit code `0` => true
    - any other exit code => false
    - spawn failure => treat as config error.
@@ -201,7 +200,7 @@ lastCheckAt: <unix timestamp> | null   # used for condition check.interval gatin
    - If false:
      - `trueStreak = 0`
      - `firstTrueAt = null`
-4. Due if `trueStreak >= condition.trigger`.
+4. Due if `trueStreak >= trigger`.
 5. Body text: `Condition true for <trueStreak> consecutive checks`.
 
 ### 6.4 Snooze
@@ -237,18 +236,17 @@ lastCheckAt: <unix timestamp> | null   # used for condition check.interval gatin
 ## 9. Example config
 
 ```yaml
-notificationWindow:
-  start: "18:00"
-  end: "22:00"
+notifyWindow:
+  from: "18:00"
+  to: "22:00"
 
 reminders:
   systemUpdates:
     type: interval
     label: "Update your NixOS system"
     snooze: 86400
-    interval:
-      duration: 1814400 # 3w
-      lastDoneCommand: stat -c %Y /etc/nixos/flake.lock || echo 0
+    every: 1814400 # 3w
+    lastDoneOverride: stat -c %Y /etc/nixos/flake.lock || echo 0
     action:
       label: "Run update"
       command: "nixos-rebuild switch"
@@ -256,17 +254,15 @@ reminders:
   backups:
     type: interval
     label: "Run backups"
-    interval:
-      duration: 604800 # 7d
-      lastDoneCommand: kopia last-snapshot || echo 0
+    every: 604800 # 7d
+    lastDoneOverride: kopia last-snapshot || echo 0
     action:
       command: "kopia snapshot create"
 
   powerSaver:
     type: condition
     label: "Power saver off too long"
-    condition:
-      interval: 1800 # 30m
-      command: "powerprofilesctl get | grep -vq power-saver"
-      trigger: 12
+    every: 1800 # 30m
+    conditionCommand: "powerprofilesctl get | grep -vq power-saver"
+    trigger: 12
 ```
