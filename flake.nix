@@ -14,7 +14,7 @@
       homeManagerModules.remindd = { pkgs, ... }:
         {
           imports = [ hmModule ];
-          _module.args.remindd = self.packages.${pkgs.system}.remindd;
+          _module.args.remindd = self.packages.${pkgs.stdenv.hostPlatform.system}.remindd;
         };
       homeManagerModules.default = self.homeManagerModules.remindd;
     }
